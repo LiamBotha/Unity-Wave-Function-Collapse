@@ -17,6 +17,7 @@ public class WFCoreModule : MonoBehaviour
     private ModuleContainer[][] grid;
 
     private ModuleReader inputReader;
+    private CustomGrid customGrid;
 
     private bool outputStarted = false;
     private bool tilemapCompleted = false;
@@ -28,16 +29,38 @@ public class WFCoreModule : MonoBehaviour
         tilemapCompleted = false;
 
         modules = modulesParent.GetComponentsInChildren<Module>().ToList();
+        customGrid = FindObjectOfType<CustomGrid>();
+        customGrid.mapObject = mapObject;
 
         inputReader = new ModuleReader(modules.ToArray());
 
-        for(int i = 0; i < mapObject.transform.childCount; ++i)
+        for (int i = 0; i < mapObject.transform.childCount; ++i)
         {
             Destroy(mapObject.transform.GetChild(i).gameObject);
         }
 
         if (inputReader.GotInput)
             InitializeGrid();
+
+        //GetPlayerPlacedTiles();
+    }
+
+    private void GetPlayerPlacedTiles()
+    {
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                GameObject obj = customGrid.GetTileAtPosition(-(width / 2), y - (height / 1.8f));
+
+                if (obj != null)
+                {
+                    Module moduleToPlace = obj.GetComponent<Module>();
+                    grid[x + width * y] = new[] { new ModuleContainer(moduleToPlace, x, y) };
+                    Propagate(new Vector2Int(x, y));
+                }
+            }
+        }
     }
 
     // Update is called once per frame
@@ -248,7 +271,9 @@ public class WFCoreModule : MonoBehaviour
             for (int x = 0; x < width; x++)
             {
                 Module tileToPlace = grid[x + width * (height - y)][0].Module;
-                GameObject.Instantiate(tileToPlace.gameObject, new Vector3(x - (width / 2), y - (height / 1.8f), 0), Quaternion.identity, mapObject.transform);
+                //GameObject.Instantiate(tileToPlace.gameObject, new Vector3(x - (width / 2), y - (height / 1.8f), 0), Quaternion.identity, mapObject.transform);
+
+                customGrid.SetTile(tileToPlace.gameObject, x - (width / 2), y - (height / 1.8f));
             }
         }
         tilemapCompleted = true;
