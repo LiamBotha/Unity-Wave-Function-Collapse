@@ -22,13 +22,13 @@ public class WFCInspector : Editor
     }
 }
 
-[CustomEditor(typeof(WFCoreModule))]
+[CustomEditor(typeof(WaveFunctionCollapseManager))]
 public class WFCModuleInspector : Editor
 {
     public override void OnInspectorGUI()
     {
         DrawDefaultInspector();
-        WFCoreModule myScript = (WFCoreModule)target;
+        WaveFunctionCollapseManager myScript = (WaveFunctionCollapseManager)target;
 
         if (GUILayout.Button("Create Tilemap"))
         {

@@ -9,13 +9,11 @@ public enum Direction
     Up,
     Down,
     Left, 
-    Right
+    Right,
 }
 
 public class InputReader : IReader<TileBase>
 {
-    private Tilemap inputTilemap; // maybe could make an array to sample many rulesets with wrapping;
-
     private List<TileBase> tileTypes;
     private Dictionary<TileBase, Dictionary<Direction, List<TileBase>>> compatibilities;
     private Dictionary<TileBase, float> weights;
@@ -32,7 +30,6 @@ public class InputReader : IReader<TileBase>
 
     public InputReader(Tilemap inputTilemap, bool wrapsAround = true)
     {
-        this.inputTilemap = inputTilemap;
         this.wrapsAround = wrapsAround;
 
         compatibilities = new Dictionary<TileBase, Dictionary<Direction, List<TileBase>>>();
@@ -56,27 +53,13 @@ public class InputReader : IReader<TileBase>
             }
         }
 
-        //for (int y = 0; y < bounds.size.y; y++)
-        //{
-        //    for (int x = 0; x < bounds.size.x; x++)
-        //    {
-        //        TileBase tile = GetTileAt(x, y);
-        //        if (tile != null)
-        //        {
-        //            GetTileNeighboursInAllDirections(tile);
-        //        }
-        //    }
-        //}
-
         gotInput = true;
     }
 
     private void SetTileWeight(TileBase tile)
     {
-        if (!weights.ContainsKey(tile))
-            weights.Add(tile, 0);
-
-        weights[tile] += 1; 
+        weights.TryAdd(tile, 0);
+        weights[tile] += 1;
     }
 
     private void SetTileAdjacencies(int x, int y)
@@ -89,25 +72,25 @@ public class InputReader : IReader<TileBase>
             tileTypes.Add(tile);
         }
 
-        if(tile != null)
-        {
-            var neighbourUp = GetTileInDirection(x, y, Direction.Up);
-            var neighbourDown = GetTileInDirection(x, y, Direction.Down);
-            var neighbourLeft = GetTileInDirection(x, y, Direction.Left);
-            var neighbourRight = GetTileInDirection(x, y, Direction.Right);
+        if (tile == null)
+            return;
 
-            if (neighbourUp != null)
-                AddNeighbourInDirection(compatibilities[tile], neighbourUp, Direction.Up);
-            if (neighbourDown != null)
-                AddNeighbourInDirection(compatibilities[tile], neighbourDown, Direction.Down);
-            if (neighbourLeft != null)
-                AddNeighbourInDirection(compatibilities[tile], neighbourLeft, Direction.Left);
-            if (neighbourRight != null)
-                AddNeighbourInDirection(compatibilities[tile], neighbourRight, Direction.Right);
-        }
+        TileBase neighbourUp = GetTileInDirection(x, y, Direction.Up);
+        TileBase neighbourDown = GetTileInDirection(x, y, Direction.Down);
+        TileBase neighbourLeft = GetTileInDirection(x, y, Direction.Left);
+        TileBase neighbourRight = GetTileInDirection(x, y, Direction.Right);
+
+        if (neighbourUp != null)
+            AddNeighbourInDirection(compatibilities[tile], neighbourUp, Direction.Up);
+        if (neighbourDown != null)
+            AddNeighbourInDirection(compatibilities[tile], neighbourDown, Direction.Down);
+        if (neighbourLeft != null)
+            AddNeighbourInDirection(compatibilities[tile], neighbourLeft, Direction.Left);
+        if (neighbourRight != null)
+            AddNeighbourInDirection(compatibilities[tile], neighbourRight, Direction.Right);
     }
 
-    private void AddNeighbourInDirection(Dictionary<Direction, List<TileBase>> adjacenciesDictionary, TileBase neighbourTile, Direction dir)
+    private static void AddNeighbourInDirection(Dictionary<Direction, List<TileBase>> adjacenciesDictionary, TileBase neighbourTile, Direction dir)
     {
         if(!adjacenciesDictionary.ContainsKey(dir))
         {
@@ -122,8 +105,8 @@ public class InputReader : IReader<TileBase>
     {
         if(wrapsAround)
         {
-            x = mod(x, bounds.size.x);
-            y = mod(y, bounds.size.y);
+            x = Mod(x, bounds.size.x);
+            y = Mod(y, bounds.size.y);
         }
 
         if ((x + bounds.size.x * y > -1) && (x + bounds.size.x * y < AllTiles.Length))
@@ -134,73 +117,52 @@ public class InputReader : IReader<TileBase>
 
     private TileBase GetTileInDirection(int x, int y, Direction dir) //array starts bottom left
     {
-        TileBase neighbourTile = null;
-
-        switch (dir)
+        TileBase neighbourTile = dir switch
         {
-            case Direction.Up:
-                {
-                    neighbourTile = GetTileAt(x, y + 1);
-                }
-                break;
-            case Direction.Down:
-                {
-                    neighbourTile = GetTileAt(x, y - 1);
-                }
-                break;
-            case Direction.Left:
-                {
-                    neighbourTile = GetTileAt(x - 1, y);
-                }
-                break;
-            case Direction.Right:
-                {
-                    neighbourTile = GetTileAt(x + 1, y);
-                }
-                break;
-            default:
-                neighbourTile = null;
-                break;
-        }
+            Direction.Up => GetTileAt(x, y + 1),
+            Direction.Down => GetTileAt(x, y - 1),
+            Direction.Left => GetTileAt(x - 1, y),
+            Direction.Right => GetTileAt(x + 1, y),
+            _ => null
+        };
 
         return neighbourTile;
     }
 
-    private void GetTileNeighboursInAllDirections(TileBase tile)
-    {
-        if(tile != null)
-        {
-            foreach(Direction dir in Enum.GetValues(typeof(Direction)))
-            {
-                if(compatibilities[tile].ContainsKey(dir))
-                {
-                    var compatNeighboursInDir = compatibilities[tile][dir];
-                    string output = "tile: " + tile.name + ", " + dir.ToString() + " neighbour: ";
-
-                    foreach (var neighbour in compatNeighboursInDir)
-                    {
-                        output += neighbour.name + ", ";
-                    }
-
-                    //Debug.Log("Tile Adjacencies: " + output);
-                }
-            }
-        }
-    }
+    // private void GetTileNeighboursInAllDirections(TileBase tile)
+    // {
+    //     if(tile != null)
+    //     {
+    //         foreach(Direction dir in Enum.GetValues(typeof(Direction)))
+    //         {
+    //             if(compatibilities[tile].ContainsKey(dir))
+    //             {
+    //                 List<TileBase> compatNeighboursInDir = compatibilities[tile][dir];
+    //                 string output = "tile: " + tile.name + ", " + dir.ToString() + " neighbour: ";
+    //
+    //                 foreach (TileBase neighbour in compatNeighboursInDir)
+    //                 {
+    //                     output += neighbour.name + ", ";
+    //                 }
+    //
+    //                 //Debug.Log("Tile Adjacencies: " + output);
+    //             }
+    //         }
+    //     }
+    // }
 
     public bool CheckForPossibleTile(TileBase currentTile, Direction dir, TileBase tileToFind)
     {
-        if (Compatibilities.ContainsKey(currentTile) && Compatibilities[currentTile].ContainsKey(dir))
-        {
-            bool hasTile = Compatibilities[currentTile][dir].Contains(tileToFind);
+        if (!Compatibilities.ContainsKey(currentTile) || !Compatibilities[currentTile].ContainsKey(dir))
+            return false;
 
-            return hasTile;
-        }
+        bool hasTile = Compatibilities[currentTile][dir].Contains(tileToFind);
 
-        return false;
+        return hasTile;
+
     }
 
-    int mod(int x, int m)
+    private static int Mod(int x, int m)
     {
         return (x % m + m) % m;
     }
