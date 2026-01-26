@@ -1,73 +1,94 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEditor;
 using UnityEngine;
-
 public class WaveFunctionCollapseManager : MonoBehaviour
 {
-    [SerializeField] private GameObject modulesParent;
-    [SerializeField] private GameObject mapObject;
-    [SerializeField] private int width = 3, height = 3;
+    [SerializeField] private GameObject modulesParent; // obj holding all the modules
+    [SerializeField] private GameObject mapObject; // obj to hold all the tiles
+    [SerializeField] private int startWidth = 10, startHeight = 10; // how many tiles to place
+    private int numTilesX, numTilesY;
 
-    private List<Module> modules;
+    private List<TileModule> modules;
+    private TileModuleWrapper[][] grid;
+    private TileModuleReader inputReader; // actually handles calculating possible tiles
+    private CustomGrid customGrid; // handles tile object placement in world
 
-    private ModuleContainer[][] grid;
-
-    private ModuleReader inputReader;
-    private CustomGrid customGrid;
-
-    private bool outputStarted;
-    private bool tilemapCompleted;
+    //private bool outputStarted;
+    private bool tilemapCompleted; // finished generating tilemap ?
 
     // Start is called before the first frame update
     public void Awake()
     {
-        outputStarted = false;
-        tilemapCompleted = false;
-
-        modules = modulesParent.GetComponentsInChildren<Module>().ToList(); // get all modules to build possibilities
         customGrid = FindFirstObjectByType<CustomGrid>();
-        customGrid.mapObject = mapObject;
+        
+        // get all modules to build possibilities
+        modules = modulesParent.GetComponentsInChildren<TileModule>().ToList();
+        
+        // init the reader with all the tile modules
+        inputReader = new TileModuleReader(modules.ToArray());
+        
+        // clear existing tiles & fill the grid with the possible tiles
+        InitializeGrid();
+    }
 
-        inputReader = new ModuleReader(modules.ToArray());
+    public void StartMapGeneration(float tileSize)
+    {
+        StopAllCoroutines();
+        
+        //outputStarted = false;
+        tilemapCompleted = false;
+        
+        customGrid.mapParent = mapObject;
+        customGrid.tileSize = tileSize;
 
+        // adjust number of tiles to place based on tile size
+        numTilesX = Mathf.CeilToInt(startWidth / tileSize);
+        numTilesY = Mathf.CeilToInt(startHeight / tileSize);
+        
+        // clear old tiles placed 
         for (int i = 0; i < mapObject.transform.childCount; ++i)
         {
             Destroy(mapObject.transform.GetChild(i).gameObject);
         }
-
-        if (inputReader.GotInput)
-            InitializeGrid();
+        
+        InitializeGrid();
+        
+        StartCoroutine(GenerateMap(tileSize));
     }
-
-    // Update is called once per frame
-    private void Update()
+    
+    private IEnumerator GenerateMap(float tileSize)
     {
-        if (inputReader.GotInput && !IsFullyCollapsed())
+        // are there tiles that haven't been set yet?
+        while (!IsFullyCollapsed())
         {
             Iterate();
-        }
-        else if (inputReader.GotInput && outputStarted == false)
-        {
-            outputStarted = true;
-            GenerateOutputTilemap();
-        }
-    }
 
-    // enables every possible tile for each index in grid
+            yield return null;
+
+        }
+
+        yield return null;
+    }
+    
+    // for each position in the grid fills the module with every possible tile neighbor
     private void InitializeGrid()
     {
-        grid = new ModuleContainer[width * height][];
+        if(grid == null || grid.Length < numTilesX * numTilesY) 
+            grid = new TileModuleWrapper[numTilesX * numTilesY][];
 
-        for (int y = 0; y < height; y++)
+        for (int y = 0; y < numTilesY; y++)
         {
-            for (int x = 0; x < width; x++)
+            for (int x = 0; x < numTilesX; x++)
             {
-                grid[x + width * y] = new ModuleContainer[inputReader.GetTileTypesCount()];
+                // new create a new wrapper array and add all possible tile types to it 
+                grid[x + numTilesX * y] = new TileModuleWrapper[inputReader.GetTileTypesCount()];
                 for (int i = 0; i < inputReader.GetTileTypesCount(); ++i)
                 {
-                    grid[x + width * y][i] = new ModuleContainer(inputReader.GetTileTypeAtIndex(i), x, y);
+                    grid[x + numTilesX * y][i] = new TileModuleWrapper(inputReader.GetTileTypeAtIndex(i), x, y);
+                    customGrid.SetTile(null, x, y);
                 }
             }
         }
@@ -79,31 +100,28 @@ public class WaveFunctionCollapseManager : MonoBehaviour
         Vector2Int coords = GetLowestEntropy();
         Collapse(coords);
         Propagate(coords);
+    
+        GenerateOutputTilemap();
     }
 
     // Collapses the position in grid to a single tile
     private void Collapse(Vector2Int coords)
     {
-        int x = coords.x, y = coords.y;
+        TileModuleWrapper[] gridPos = grid[coords.x + numTilesX * coords.y];
 
-        ModuleContainer[] gridPos = grid[x + width * y];
-
-        float totalWeight = 0;
-        foreach (ModuleContainer possibleTile in gridPos)
-        {
-            totalWeight += inputReader.GetTileWeight(possibleTile.Module);
-        }
-
+        // Calculate weight of all possible tiles at each position in grid to determine which to collapse
+        float totalWeight = gridPos.Sum(possibleTile => inputReader.GetTileWeight(possibleTile.TileModule));
         float randVal = UnityEngine.Random.Range(0f, 1f) * totalWeight;
 
-        foreach (ModuleContainer possibleTile in gridPos)
+        foreach (TileModuleWrapper possibleTile in gridPos)
         {
-            randVal -= inputReader.GetTileWeight(possibleTile.Module);
+            randVal -= inputReader.GetTileWeight(possibleTile.TileModule);
 
-            if (!(randVal <= 0))
+            if (randVal > 0)
                 continue;
-
-            grid[x + width * y] = new[] { possibleTile };
+            
+            // collapse possibilities into a single tile
+            grid[coords.x + numTilesX * coords.y] = new[] { possibleTile };
             break;
         }
     }
@@ -111,49 +129,51 @@ public class WaveFunctionCollapseManager : MonoBehaviour
     // removes nonviable tiles from neighbors of the tile at coords
     private void Propagate(Vector2Int coords)
     {
-        Vector2Int[] directions = { new Vector2Int(0, -1), new Vector2Int(0, 1), new Vector2Int(-1, 0), new Vector2Int(1, 0) };
-        Stack<Vector2Int> propagationStack = new Stack<Vector2Int>();
+        Vector2Int[] directions = { new(0, -1), new(0, 1), new(-1, 0), new(1, 0) };
+        Stack<Vector2Int> propagationStack = new ();
 
         propagationStack.Push(coords);
-
         
+        // keep going till the neighbor's possibilities can't be further reduced
         while (propagationStack.Count > 0)
         {
-            Vector2Int current = propagationStack.Pop();
-            int x = current.x, y = current.y;
-
-            ModuleContainer[] currPossibleTiles = grid[x + width * y];
-
+            Vector2Int currentNeighborPos = propagationStack.Pop();
+            TileModuleWrapper[] neighborPossibleTiles = grid[currentNeighborPos.x + numTilesX * currentNeighborPos.y];
+            
+            // for each neighbor - left, right, top, bottom
             for (int d = 0; d < directions.Length; ++d)
             {
-                int dx = x + directions[d].x, dy = y + directions[d].y;
-                int dirIndex = (dx + width * dy);
+                int dirX = currentNeighborPos.x + directions[d].x;
+                int dirY = currentNeighborPos.y + directions[d].y;
+                int neighborIndex = (dirX + numTilesX * dirY);
 
-                if (dirIndex <= 0 || dirIndex >= grid.Length)
+                // make sure index is in bounds
+                if (neighborIndex < 0 || neighborIndex >= grid.Length)
                     continue;
                 
-                List<ModuleContainer> otherCoords = grid[dirIndex].ToList();
-
-                foreach (ModuleContainer otherTile in otherCoords)
+                foreach (TileModuleWrapper potentialNeighborTile in grid[neighborIndex])
                 {
-                    bool isCompat = (
-                        from currTile in currPossibleTiles
-                        where inputReader.CheckForPossibleTile(currTile.Module, (Direction)d, otherTile.Module) && otherTile.IsPossible
-                        select currTile
+                    bool bIsCompatible = (
+                        from possibleTile in neighborPossibleTiles
+                        where inputReader.CheckForPossibleTile(possibleTile.TileModule, (Direction)d, potentialNeighborTile.TileModule) && potentialNeighborTile.IsPossible
+                        select possibleTile
                     ).Any();
 
-                    if (isCompat)
+                    if (bIsCompatible)
                         continue;
-
-                    otherTile.IsPossible = false;
-                    propagationStack.Push(new Vector2Int(dx, dy));
+                    
+                    potentialNeighborTile.IsPossible = false;
+                    propagationStack.Push(new Vector2Int(dirX, dirY)); // removed tile add to list of propagations
                 }
 
-                grid[dx + width * dy] = otherCoords.Where(val => val.IsPossible == true).ToArray();
+                // filter tiles to only be possible tiles
+                grid[dirX + numTilesX * dirY] = grid[neighborIndex].Where(potentialTile => potentialTile.IsPossible).ToArray();
 
-                if (grid[dx + width * dy].Length != 0)
+                // make sure it hasn't run out of possible tiles
+                if (grid[dirX + numTilesX * dirY].Length != 0)
                     continue;
 
+                // failed to get a valid grid, so restart from beginning
                 InitializeGrid();
                 propagationStack.Clear();
                 break;
@@ -161,57 +181,60 @@ public class WaveFunctionCollapseManager : MonoBehaviour
         }
     }
 
+    // returns the entropy of possible tiles at the requested position
     private float GetEntropy(int x, int y)
     {
         float sumWeights = 0;
         float sumWeightsLog = 0;
 
-        foreach (ModuleContainer possibleTile in grid[x + width * y])
+        foreach (TileModuleWrapper potentialTile in grid[x + numTilesX * y])
         {
-            if (!possibleTile.IsPossible)
+            if (!potentialTile.IsPossible)
                 continue;
 
-            float weight = inputReader.GetTileWeight(possibleTile.Module);
+            float weight = inputReader.GetTileWeight(potentialTile.TileModule);
             sumWeights += weight;
             sumWeightsLog += weight * (float)Math.Log(weight);
         }
 
         return (float)Math.Log(sumWeights) - (sumWeightsLog / sumWeights);
-    } // returns the number of possible tiles at the requested position
+    }
 
+    // returns the position with the lowest number of possible tiles
     private Vector2Int GetLowestEntropy()
     {
         float minEntropy = -1;
         var minCoords = new Vector2Int();
 
-        for (int y = 0; y < height; y++)
+        for (int y = 0; y < numTilesY; y++)
         {
-            for (int x = 0; x < width; x++)
+            for (int x = 0; x < numTilesX; x++)
             {
-                if (grid[x + width * y].Length > 1)
-                {
-                    float entropy = GetEntropy(x, y) - (UnityEngine.Random.Range(0f, 1f) / 1000);
+                if (grid[x + numTilesX * y].Length <= 1)
+                    continue;
 
-                    if (!Mathf.Approximately(minEntropy, -1) && !(entropy < minEntropy))
-                        continue;
+                float entropy = GetEntropy(x, y) - (UnityEngine.Random.Range(0f, 1f) / 1000);
 
-                    minEntropy = entropy;
-                    minCoords = new Vector2Int(x, y);
-                }
+                if (Mathf.Approximately(minEntropy, -1) == false && entropy >= minEntropy)
+                    continue;
+
+                minEntropy = entropy;
+                minCoords = new Vector2Int(x, y);
             }
         }
 
         return minCoords;
-    } // returns the postion with the lowest number of possible  tiles
+    }
 
     // checks if there is only one tile for each position and the algorithm is completed
     private bool IsFullyCollapsed()
     {
-        for (int y = 0; y < height; y++)
+        // TODO - Keep track of collapsed tiles, then just check value matches array size
+        for (int y = 0; y < numTilesY; y++)
         {
-            for (int x = 0; x < width; x++)
+            for (int x = 0; x < numTilesX; x++)
             {
-                if (grid[x + width * y].Length > 1)
+                if (grid[x + numTilesX * y].Length > 1)
                     return false;
             }
         }
@@ -222,20 +245,23 @@ public class WaveFunctionCollapseManager : MonoBehaviour
     // Places all the tiles onto the tilemap 
     private void GenerateOutputTilemap()
     {
-        for (int y = 1; y <= height; y++)
+        for (int y = 1; y <= numTilesY; y++)
         {
-            for (int x = 0; x < width; x++)
+            for (int x = 0; x < numTilesX; x++)
             {
-                Module tileToPlace = grid[x + width * (height - y)][0].Module;
-
-                customGrid.SetTile(tileToPlace.gameObject, x - (width / 2f), y - (height / 1.8f));
+                // if there are multiple tiles then this gridPos hasn't been collapsed
+                if (grid[x + numTilesX * (numTilesY - y)].Length > 1)
+                    continue;
+                
+                TileModule tileToPlace = grid[x + numTilesX * (numTilesY - y)][0].TileModule;
+                customGrid.SetTile(tileToPlace.gameObject, x, y);
             }
         }
         tilemapCompleted = true;
     }
 
     // Saves tilemap out to a prefab. prefab must be placed on a grid object
-    public void SaveTilemap() // TODO - rework for gameobjects
+    public void SaveTilemap()
     {
         if (!tilemapCompleted)
             return;
