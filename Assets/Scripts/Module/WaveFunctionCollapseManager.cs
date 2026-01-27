@@ -34,7 +34,7 @@ public class WaveFunctionCollapseManager : MonoBehaviour
         InitializeGrid();
     }
 
-    public void StartMapGeneration(float tileSize)
+    public void StartMapGeneration()
     {
         StopAllCoroutines();
         
@@ -42,12 +42,20 @@ public class WaveFunctionCollapseManager : MonoBehaviour
         tilemapCompleted = false;
         
         customGrid.mapParent = mapObject;
-        customGrid.tileSize = tileSize;
 
         // adjust number of tiles to place based on tile size
-        numTilesX = Mathf.CeilToInt(startWidth / tileSize);
-        numTilesY = Mathf.CeilToInt(startHeight / tileSize);
-        
+        numTilesX = Mathf.FloorToInt(startWidth / customGrid.tileSize);
+        numTilesY = Mathf.FloorToInt(startHeight / customGrid.tileSize);
+
+        if (Camera.main != null)
+        {
+            Debug.Log(numTilesY + ", " + ((numTilesY - 1) * customGrid.tileSize) / 2f);
+            
+            Vector3 vector3 = Camera.main.transform.position;
+            vector3.y = ((numTilesY - 1) * customGrid.tileSize) / 2f;
+            Camera.main.transform.position = vector3;
+        }
+
         // clear old tiles placed 
         for (int i = 0; i < mapObject.transform.childCount; ++i)
         {
@@ -56,7 +64,7 @@ public class WaveFunctionCollapseManager : MonoBehaviour
         
         InitializeGrid();
         
-        StartCoroutine(GenerateMap(tileSize));
+        StartCoroutine(GenerateMap(customGrid.tileSize));
     }
     
     private IEnumerator GenerateMap(float tileSize)
@@ -252,9 +260,11 @@ public class WaveFunctionCollapseManager : MonoBehaviour
                 // if there are multiple tiles then this gridPos hasn't been collapsed
                 if (grid[x + numTilesX * (numTilesY - y)].Length > 1)
                     continue;
+
+                float halfExtents = ((numTilesX - 1) / 2f);
                 
                 TileModule tileToPlace = grid[x + numTilesX * (numTilesY - y)][0].TileModule;
-                customGrid.SetTile(tileToPlace.gameObject, x, y);
+                customGrid.SetTile(tileToPlace.gameObject, x - halfExtents, y - 1);
             }
         }
         tilemapCompleted = true;

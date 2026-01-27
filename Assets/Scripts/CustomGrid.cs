@@ -1,13 +1,13 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Serialization;
 
 public class CustomGrid : MonoBehaviour
 {
-    [SerializeField] public float tileSize = 1;
+    public float tileSize = 1;
     [SerializeField] private GameObject defaultTile;
-    [SerializeField] private float offsetX = 0.5f, offsetY = 0.5f; // positional offset for grid // breaks algo at 1
 
     private Dictionary<Vector2, GameObject> gridObjects;
     
@@ -19,14 +19,6 @@ public class CustomGrid : MonoBehaviour
     {
         cam = Camera.main;
         gridObjects = new Dictionary<Vector2, GameObject>();
-        
-        for(int y = 0 ; y < 5; y++)
-        {
-            for (int x = 0; x < 5; x++)
-            {
-                SetTile(defaultTile, x, y);
-            }
-        }
     }
 
     private void Update()
@@ -38,22 +30,23 @@ public class CustomGrid : MonoBehaviour
         // SetTile(defaultTile, worldMousePos.x - offsetX, worldMousePos.y - offsetY);
     }
 
+    public void SetTileSize(float newTileSize) // if changed while running will cause issues
+    {
+        tileSize = newTileSize;
+    }
+
     public void SetTile(GameObject tileToPlace, float x, float y)
     {
-        // use this only for the grid pos not game pos
-        float gridX = x * tileSize;
-        float gridY = y * tileSize;
-
-        var coords = new Vector2(gridX, gridY);
-        float posX = (gridX) + (offsetX * tileSize);
-        float posY = (gridY) + (offsetY * tileSize);
+        var coords = new Vector2(x * tileSize, y * tileSize);
+        float posX = x * tileSize;
+        float posY = y * tileSize;
 
         if (gridObjects.TryGetValue(coords, out GameObject gridObj))
         {
             Destroy(gridObj);
             gridObjects.Remove(coords);
         }
-
+        
         if (!tileToPlace)
             return;
 
@@ -62,47 +55,5 @@ public class CustomGrid : MonoBehaviour
         gridObject.transform.localScale = new Vector3(tileSize, tileSize, tileSize);
         gridObjects.Add(coords, gridObject);
 
-    }
-
-    private bool ContainsTile(float x, float y)
-    {
-        int gridX = Mathf.RoundToInt(x - offsetX / tileSize);
-        int gridY = Mathf.RoundToInt(y - offsetY / tileSize);
-
-        var coords = new Vector2Int(gridX, gridY);
-        return gridObjects.ContainsKey(coords);
-    }
-
-    public GameObject GetTileAtPosition(float worldX, float worldY)
-    {
-        float gridX = worldX - offsetX * tileSize;
-        float gridY = worldY - offsetY * tileSize;
-
-        var coords = new Vector2(gridX, gridY);
-        return gridObjects.GetValueOrDefault(coords);
-    }
-
-    // Finds all blocks that have been placed within a certain range
-    public GameObject[] GetAllTilesInRange(float minX, float minY, float maxX, float maxY)
-    {
-        List<GameObject> tilesPlaced = new();
-
-        float rangeX = Mathf.Abs(maxX - minX);
-        float rangeY = Mathf.Abs(maxY - minY);
-
-        for (int y = 0; y < rangeY; y++)
-        {
-            for (int x = 0; x < rangeX; x++)
-            {
-                int gridX = Mathf.RoundToInt(minX + x / tileSize);
-                int gridY = Mathf.RoundToInt(minY + y / tileSize);
-                var coords = new Vector2Int(gridX, gridY);
-
-                if (gridObjects.TryGetValue(coords, out GameObject obj))
-                    tilesPlaced.Add(obj);
-            }
-        }
-
-        return tilesPlaced.ToArray();
     }
 }
