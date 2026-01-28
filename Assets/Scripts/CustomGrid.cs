@@ -30,11 +30,6 @@ public class CustomGrid : MonoBehaviour
         // SetTile(defaultTile, worldMousePos.x - offsetX, worldMousePos.y - offsetY);
     }
 
-    public void SetTileSize(float newTileSize) // if changed while running will cause issues
-    {
-        tileSize = newTileSize;
-    }
-
     public void SetTile(GameObject tileToPlace, float x, float y)
     {
         var coords = new Vector2(x * tileSize, y * tileSize);

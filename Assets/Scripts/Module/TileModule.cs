@@ -31,6 +31,7 @@ public class TileModule : MonoBehaviour
     public bool CanRepeatRight { get => canRepeatRight; }
     public TileModule[] ExcludedNeighbours { get => excludedNeighbours; }
 
+    #if UNITY_EDITOR
     private void OnDrawGizmos()
     {
         Handles.Label(transform.position + Vector3.up, connectorUp.ToString());
@@ -38,4 +39,5 @@ public class TileModule : MonoBehaviour
         Handles.Label(transform.position + Vector3.left, connectorLeft.ToString());
         Handles.Label(transform.position + Vector3.right, connectorRight.ToString());
     }
+    #endif
 }

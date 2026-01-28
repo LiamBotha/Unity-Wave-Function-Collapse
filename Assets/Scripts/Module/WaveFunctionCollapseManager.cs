@@ -4,6 +4,9 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.UIElements;
+using Slider = UnityEngine.UI.Slider;
+
 public class WaveFunctionCollapseManager : MonoBehaviour
 {
     [SerializeField] private GameObject modulesParent; // obj holding all the modules
@@ -15,8 +18,8 @@ public class WaveFunctionCollapseManager : MonoBehaviour
     private TileModuleWrapper[][] grid;
     private TileModuleReader inputReader; // actually handles calculating possible tiles
     private CustomGrid customGrid; // handles tile object placement in world
-
-    //private bool outputStarted;
+    [SerializeField] private Slider slider;
+    
     private bool tilemapCompleted; // finished generating tilemap ?
 
     // Start is called before the first frame update
@@ -42,6 +45,9 @@ public class WaveFunctionCollapseManager : MonoBehaviour
         tilemapCompleted = false;
         
         customGrid.mapParent = mapObject;
+
+        // cache the slider value only when starting generation
+        customGrid.tileSize = slider.value;
 
         // adjust number of tiles to place based on tile size
         numTilesX = Mathf.FloorToInt(startWidth / customGrid.tileSize);
@@ -84,8 +90,7 @@ public class WaveFunctionCollapseManager : MonoBehaviour
     // for each position in the grid fills the module with every possible tile neighbor
     private void InitializeGrid()
     {
-        if(grid == null || grid.Length < numTilesX * numTilesY) 
-            grid = new TileModuleWrapper[numTilesX * numTilesY][];
+        grid = new TileModuleWrapper[numTilesX * numTilesY][];
 
         for (int y = 0; y < numTilesY; y++)
         {
@@ -180,7 +185,7 @@ public class WaveFunctionCollapseManager : MonoBehaviour
                 // make sure it hasn't run out of possible tiles
                 if (grid[dirX + numTilesX * dirY].Length != 0)
                     continue;
-
+                
                 // failed to get a valid grid, so restart from beginning
                 InitializeGrid();
                 propagationStack.Clear();
@@ -270,6 +275,7 @@ public class WaveFunctionCollapseManager : MonoBehaviour
         tilemapCompleted = true;
     }
 
+    #if UNITY_EDITOR
     // Saves tilemap out to a prefab. prefab must be placed on a grid object
     public void SaveTilemap()
     {
@@ -280,5 +286,6 @@ public class WaveFunctionCollapseManager : MonoBehaviour
 
         PrefabUtility.SaveAsPrefabAsset(objectToSave, "Assets/Saved/Output" + (mapObject.transform.GetChild(0).GetHashCode() + UnityEngine.Random.Range(0,10000)) + ".prefab");
     }
+    #endif
 }
 
